@@ -1,4 +1,5 @@
 # https://www.cs.cmu.edu/~baraff/papers/sig98.pdf
+# https://github.com/taichiCourse01/taichiCourse01/blob/main/material/09_implicit_integration.pdf
 import argparse
 
 import numpy as np
