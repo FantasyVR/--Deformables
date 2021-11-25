@@ -105,7 +105,7 @@ class Cloth:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
             pos1, pos2 = self.pos[idx1], self.pos[idx2]
             dis = pos1 - pos2
-            # Hook's law
+            # Hook's law, PPT 73
             force = self.ks * (dis.norm() -
                                self.rest_len[i]) * dis.normalized()
             self.force[idx1] -= force
@@ -115,6 +115,8 @@ class Cloth:
                                          self.pos[self.N])
         self.force[self.NV - 1] += self.kf * (self.initPos[self.NV - 1] -
                                               self.pos[self.NV - 1])
+
+# PPT 74
 
     @ti.kernel
     def compute_force_Jacobians(self):
@@ -133,6 +135,7 @@ class Cloth:
         # Attachment constraint force Jacobian
         self.Jf[0] = ti.Matrix([[-self.kf, 0], [0, -self.kf]])
         self.Jf[1] = ti.Matrix([[-self.kf, 0], [0, -self.kf]])
+# PPT: 75
 
     @ti.kernel
     def assemble_K(self, K: ti.linalg.sparse_matrix_builder()):
@@ -146,12 +149,14 @@ class Cloth:
         for m, n in ti.static(ti.ndrange(2, 2)):
             K[2 * self.N + m, 2 * self.N + n] += self.Jf[0][m, n]
             K[2 * (self.NV - 1) + m, 2 * (self.NV - 1) + n] += self.Jf[1][m, n]
+# PPT 46
 
     @ti.kernel
     def directUpdatePosVel(self, h: ti.f32, v_next: ti.ext_arr()):
         for i in self.pos:
             self.vel[i] = ti.Vector([v_next[2 * i], v_next[2 * i + 1]])
             self.pos[i] += h * self.vel[i]
+# PPT 46
 
     def update_direct(self, h):
         self.compute_force()
@@ -173,6 +178,8 @@ class Cloth:
         # print("solver flag: ", flag)
         self.directUpdatePosVel(h, v_next)
 
+# PPT 46
+
     @ti.kernel
     def cgUpdatePosVel(self, h: ti.f32):
         for i in self.pos:
@@ -193,8 +200,11 @@ class Cloth:
             result += v1[i][1] * v2[i][1]
         return result
 
+# PPT: 46
+
     @ti.func
     def A_mult_x(self, h, dst, src):
+        # -h^2 * (K @ x)
         coeff = -h**2
         for i in range(self.NV):
             dst[i] = self.mass[i] * src[i]
@@ -210,9 +220,10 @@ class Cloth:
 
     # conjugate gradient solving
     # https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
+# PPT: 105
 
     @ti.kernel
-    def before_ite(self) -> ti.f32:
+    def before_ite(self, h: ti.f32) -> ti.f32:
         for i in range(self.NV):
             self.x[i] = ti.Vector([0.0, 0.0])
         self.A_mult_x(h, self.Ax, self.x)  # Ax = A @ x
@@ -223,8 +234,10 @@ class Cloth:
         delta_new = self.dot(self.r, self.r)
         return delta_new
 
+# PPT: 105
+
     @ti.kernel
-    def run_iteration(self, delta_new: ti.f32) -> ti.f32:
+    def run_iteration(self, delta_new: ti.f32, h: ti.f32) -> ti.f32:
         self.A_mult_x(h, self.Ad, self.d)  # Ad = A @ d
         alpha = delta_new / self.dot(self.d,
                                      self.Ad)  # alpha = (r^T * r) / dot(d, Ad)
@@ -239,11 +252,14 @@ class Cloth:
                 i]  #p^{i+1} = r^{i+1} + beta * p^{i}
         return delta_new
 
+
+# PPT: 105
+
     def cg(self, h: ti.f32):
-        delta_new = self.before_ite()
+        delta_new = self.before_ite(h)
         ite, iteMax = 0, 2 * self.NV
         while ite < iteMax and delta_new > 1.0e-6:
-            delta_new = self.run_iteration(delta_new)
+            delta_new = self.run_iteration(delta_new, h)
             ite += 1
 
     def update_cg(self, h):
@@ -262,7 +278,6 @@ class Cloth:
             line_Begin[i], line_End[i] = pos[idx1], pos[idx2]
         gui.lines(line_Begin, line_End, radius=2, color=0x0000ff)
         gui.circles(self.pos.to_numpy(), radius, color)
-
 
 if __name__ == "__main__":
     ti.init(arch=ti.cpu)
